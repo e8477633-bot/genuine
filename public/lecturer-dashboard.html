@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lecturer Dashboard - Mzuzu University</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:Arial,sans-serif}
+        body{background:#f0f4f8;padding-bottom:40px}
+        .navbar{background:#0a2b3e;color:white;padding:15px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+        .logo{font-size:1.3rem;font-weight:bold}
+        .badge{background:#fdbb4d;color:#0a2b3e;padding:5px 12px;border-radius:20px}
+        .logout-btn{background:#dc2626;color:white;border:none;padding:8px 20px;border-radius:10px;cursor:pointer}
+        .container{max-width:1000px;margin:20px auto;padding:0 20px}
+        .create-post{background:white;border-radius:20px;padding:20px;margin-bottom:20px}
+        .create-post input,.create-post textarea{width:100%;padding:10px;margin:10px 0;border-radius:10px;border:1px solid #ddd}
+        .create-post textarea{min-height:100px}
+        .media-buttons{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+        .media-btn{padding:8px 15px;border:none;border-radius:20px;cursor:pointer;font-weight:bold}
+        .media-btn.voice{background:#8b5cf6;color:white}
+        .media-btn.video{background:#ef4444;color:white}
+        .media-btn.doc{background:#3b82f6;color:white}
+        .media-btn.image{background:#10b981;color:white}
+        .selected-media{background:#e0f2fe;padding:8px;border-radius:10px;margin:10px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap}
+        .remove-media{background:#dc2626;color:white;border:none;padding:4px 10px;border-radius:10px;cursor:pointer}
+        .submit-post{background:#0a2b3e;color:white;padding:10px 20px;border:none;border-radius:10px;cursor:pointer;margin-top:10px}
+        .post-card{background:white;border-radius:20px;padding:20px;margin-bottom:20px}
+        .post-title{font-size:1.2rem;font-weight:bold;color:#1a4a6f}
+        .post-date{font-size:11px;color:#666;margin:5px 0}
+        .post-media{margin:10px 0}
+        .post-media audio,.post-media video{max-width:100%;border-radius:10px}
+        .post-media img{max-width:100%;border-radius:10px}
+        .post-media a{color:#3b82f6;text-decoration:none}
+        .delete-post{background:#dc2626;color:white;border:none;padding:5px 15px;border-radius:20px;cursor:pointer;margin-top:10px}
+        .contact{background:#f5f5f5;padding:15px;border-radius:10px;margin-top:20px;font-size:12px;text-align:center}
+        .file-input{display:none}
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="logo">🎓 Mzuzu University <span style="color:#fdbb4d">Lecturer Portal</span></div>
+        <div><span class="badge" id="programBadge">BED_ICT</span> <span class="badge">Year <span id="levelBadge">1</span></span></div>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+    <div class="container">
+        <div class="create-post">
+            <h3>📝 Create Announcement</h3>
+            <input type="text" id="postTitle" placeholder="Title">
+            <textarea id="postContent" placeholder="Write your announcement..."></textarea>
+            
+            <div class="media-buttons">
+                <button class="media-btn voice" onclick="selectFile('voice')">🎙️ Voice Message</button>
+                <button class="media-btn video" onclick="selectFile('video')">🎥 Video</button>
+                <button class="media-btn doc" onclick="selectFile('doc')">📄 Document</button>
+                <button class="media-btn image" onclick="selectFile('image')">🖼️ Image</button>
+            </div>
+            
+            <input type="file" id="fileInput" class="file-input" accept="*/*">
+            <div id="mediaPreview"></div>
+            
+            <button class="submit-post" onclick="createPost()">📢 Post Announcement</button>
+        </div>
+        
+        <h3>📢 Your Announcements</h3>
+        <div id="postsList"></div>
+        
+        <div class="contact">
+            <strong>📞 For Queries:</strong> Emmanuel Chimombo 0891011842 | e8477633@gmail.com<br>
+            ⚠️ Queries beyond mechanical errors must be directed to your Head of Department
+        </div>
+    </div>
+
+    <script>
+        let currentUser = JSON.parse(localStorage.getItem('user'));
+        if(!currentUser || currentUser.role !== 'lecturer') window.location.href = 'index.html';
+        
+        document.getElementById('programBadge').innerHTML = currentUser.program;
+        document.getElementById('levelBadge').innerHTML = currentUser.level;
+        
+        let selectedFile = null;
+        let selectedMediaType = null;
+        
+        function selectFile(type) {
+            selectedMediaType = type;
+            const fileInput = document.getElementById('fileInput');
+            fileInput.accept = type === 'voice' ? 'audio/*' : (type === 'video' ? 'video/*' : (type === 'image' ? 'image/*' : '.pdf,.doc,.docx,.txt'));
+            fileInput.onchange = function(e) {
+                const file = e.target.files[0];
+                if(file) {
+                    selectedFile = file;
+                    document.getElementById('mediaPreview').innerHTML = `
+                        <div class="selected-media">
+                            <span>📎 ${type.toUpperCase()}: ${file.name} (${(file.size/1024).toFixed(1)} KB)</span>
+                            <button class="remove-media" onclick="clearMedia()">Remove</button>
+                        </div>
+                    `;
+                }
+            };
+            fileInput.click();
+        }
+        
+        function clearMedia() {
+            selectedFile = null;
+            selectedMediaType = null;
+            document.getElementById('mediaPreview').innerHTML = '';
+            document.getElementById('fileInput').value = '';
+        }
+        
+        async function loadPosts() {
+            try {
+                let res = await fetch('/api/posts');
+                let posts = await res.json();
+                let filtered = posts.filter(p => p.program === currentUser.program && p.level == currentUser.level);
+                let html = '';
+                for(let i = filtered.length-1; i >= 0; i--) {
+                    let p = filtered[i];
+                    let mediaHtml = '';
+                    if(p.media) {
+                        if(p.media.type === 'voice') mediaHtml = `<audio controls src="${p.media.url}"></audio>`;
+                        else if(p.media.type === 'video') mediaHtml = `<video controls src="${p.media.url}" width="100%"></video>`;
+                        else if(p.media.type === 'doc') mediaHtml = `<a href="${p.media.url}" target="_blank">📄 Download Document: ${p.media.filename || 'Document'}</a>`;
+                        else if(p.media.type === 'image') mediaHtml = `<img src="${p.media.url}" alt="Image">`;
+                    }
+                    html += `<div class="post-card">
+                        <div class="post-title">${escapeHtml(p.title)}</div>
+                        <div class="post-date">📅 ${p.date} by ${p.lecturer}</div>
+                        <div>${escapeHtml(p.content)}</div>
+                        <div class="post-media">${mediaHtml}</div>
+                        <button class="delete-post" onclick="deletePost(${p.id})">🗑️ Delete</button>
+                    </div>`;
+                }
+                document.getElementById('postsList').innerHTML = html || '<p>No announcements yet.</p>';
+            } catch(e) { console.error(e); }
+        }
+        
+        async function createPost() {
+            let title = document.getElementById('postTitle').value.trim();
+            let content = document.getElementById('postContent').value.trim();
+            
+            if(!title || !content) {
+                alert('Please enter title and content');
+                return;
+            }
+            
+            let formData = new FormData();
+            formData.append('program', currentUser.program);
+            formData.append('level', currentUser.level);
+            formData.append('title', title);
+            formData.append('content', content);
+            formData.append('lecturer', currentUser.name);
+            formData.append('mediaType', selectedMediaType || '');
+            
+            if(selectedFile) {
+                formData.append('mediaFile', selectedFile);
+            }
+            
+            try {
+                let res = await fetch('/api/posts', {
+                    method: 'POST',
+                    body: formData
+                });
+                if(res.ok) {
+                    document.getElementById('postTitle').value = '';
+                    document.getElementById('postContent').value = '';
+                    clearMedia();
+                    loadPosts();
+                    alert('Announcement posted successfully!');
+                } else {
+                    alert('Error posting announcement');
+                }
+            } catch(e) {
+                alert('Error posting announcement');
+            }
+        }
+        
+        async function deletePost(id) {
+            if(confirm('Delete this announcement?')) {
+                await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+                loadPosts();
+            }
+        }
+        
+        function escapeHtml(str) {
+            if(!str) return '';
+            return str.replace(/[&<>]/g, function(m) {
+                return m == '&' ? '&amp;' : (m == '<' ? '&lt;' : '&gt;');
+            });
+        }
+        
+        function logout() { localStorage.clear(); window.location.href = 'index.html'; }
+        
+        loadPosts();
+        setInterval(loadPosts, 5000);
+    </script>
+</body>
+</html>
